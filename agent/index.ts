@@ -1,6 +1,6 @@
-import {info} from "./logger.js";
-import {hook_dlopen, hook_libart, log_tag, NativeFunction, stack_trace} from "./jni.js";
-import {hook_java, JavaFunctions} from "./java.js";
+import { info } from "./logger.js";
+import { hook_dlopen, hook_libart, log_tag, NativeFunction, stack_trace } from "./jni.js";
+import { hook_java, JavaFunctions } from "./java.js";
 
 const native_so = "libhello-jni.so";
 
