@@ -6,7 +6,7 @@ const native_so = "libhello-jni.so";
 
 const native_functions: NativeFunction[] = [
     {
-        so: "libmyjni11.so",
+        so: "libmyjni.so",
         targets: [
             {
                 type: "export",
