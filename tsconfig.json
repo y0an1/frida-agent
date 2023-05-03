@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "lib": ["es2020"],
+    "allowJs": true,
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true
+  },
+  "rules": {
+    "no-unused-vars": "off",
+     "@typescript-eslint/no-unused-vars": ["off"]
+  },
+}
