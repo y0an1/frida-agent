@@ -2,6 +2,13 @@ import { logi } from "./logger.js";
 import { hook_native, hook_libart, log_tag, MyNativeFunction, stack_trace, dumpLua } from "./jni.js";
 import { hook_java, JavaFunctions } from "./java.js";
 
+
+/*
+    frida -H 192.168.1.74:6666 -f com.yokaverse.zzxy -l _agent.js
+    objection -N -h 192.168.1.74 -p 6666 -g com.yokaverse.zzxy explore
+*/
+
+
 const HOOK_SO_NAME = "libtolua.so";
 const LUA_SAVE_PATH = "/data/data/com.yokaverse.zzxy/lua/";
 
@@ -151,6 +158,6 @@ const JAVA_METHODS: JavaFunctions[] = [
 
 setImmediate(() => {
     // hook_libart(HOOK_SO_NAME);
-    hook_native(NATIVE_FUNCS);
+    // hook_native(NATIVE_FUNCS);
     hook_java(JAVA_METHODS);
 });
