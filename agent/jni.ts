@@ -54,7 +54,6 @@ export function stack_trace(context: CpuContext, tag: string): string {
     return `\r\n${tag} =========================================\r\n${content}\r\n${tag}=========================================`;
 }
 
-
 export interface MyNativeFunction {
     so: string,
     targets: NativeHookStruct[]

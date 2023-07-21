@@ -3,10 +3,10 @@ import { hook_native, hook_libart, log_tag, MyNativeFunction, stack_trace, dumpL
 import { hook_java, JavaFunctions } from "./java.js";
 
 
-/*
-    frida -H 192.168.1.74:6666 -f com.yokaverse.zzxy -l _agent.js
-    objection -N -h 192.168.1.74 -p 6666 -g com.yokaverse.zzxy explore
-*/
+/**
+  * frida -H 192.168.1.74:6666 -f com.yokaverse.zzxy -l _agent.js
+  * objection -N -h 192.168.1.74 -p 6666 -g com.yokaverse.zzxy explore
+  */
 
 
 const HOOK_SO_NAME = "libtolua.so";
@@ -161,3 +161,5 @@ setImmediate(() => {
     // hook_native(NATIVE_FUNCS);
     hook_java(JAVA_METHODS);
 });
+
+
