@@ -1,0 +1,1986 @@
+// noinspection JSUnusedGlobalSymbols,JSUnusedLocalSymbols,SpellCheckingInspection
+
+class Logger {
+    static stack = (tag, context, path) => {
+        Logger.error(``, ` >>>>>\t${tag} \tstart`, path)
+        if (context) {
+            // Backtracer.FUZZY
+            // Backtracer.ACCURATE
+            info(tag, Thread.backtrace(context, Backtracer.FUZZY).map(DebugSymbol.fromAddress).join('\n'))
+        } else {
+            Java.perform(function () {
+                const exception = Java.use("java.lang.Exception")
+                const ins = exception.$new("Exception")
+                const traces = ins['getStackTrace']()
+                if (undefined !== traces) {
+                    for (let i = 0; i < traces.length; i++) {
+                        Logger.info(tag, `\t${traces[i].toString()} `, path)
+                    }
+                }
+                exception.$dispose()
+            })
+        }
+        Logger.error(``, ` >>>>>\t${tag} \tend`, path)
+    }
+
+    static info = (tag, msg, path) => {
+        Logger.handle(1, Logger.fmtContent(`info`, tag, msg), path)
+    }
+
+    static debug = (tag, msg, path) => {
+        Logger.handle(2, Logger.fmtContent(`debug`, tag, msg), path)
+    }
+
+
+    static warn = (tag, msg, path) => {
+        Logger.handle(3, Logger.fmtContent(`warn`, tag, msg), path)
+    }
+
+    static error = (tag, msg, path) => {
+        Logger.handle(4, Logger.fmtContent(`error`, tag, msg), path)
+    }
+
+    static handle = (level, content, path) => {
+        if (path == null) {
+            switch (level) {
+                case 1:
+                    console.log(`${content} `)
+                    break
+                case 2:
+                    console.debug(`${content} `)
+                    break
+                case 3:
+                    console.warn(`${content} `)
+                    break
+                case 4:
+                    console.error(`${content} `)
+                    break
+                default:
+                    throw new Error(`level:${level} is not support!`)
+            }
+        } else if (!Logger.save2file(path, `${content} \r\n`, "a+")) {
+            console.error(`${path} open failed! ===========> [Logger.handle] ${content} `)
+        }
+    }
+
+    static fmtContent = (level, tag, msg) => {
+        return `[${Logger.curTime()} - ${Logger.curThread()} - ${level} - ${tag}] ${msg} `
+    }
+
+    static save2file = (path, data, mode) => {
+        const file = new File(path, mode)
+        console.log(`log file:${file} `)
+        if (file) {
+            console.log(`write log data ...`)
+            file.write(data)
+            file.flush()
+            file.close()
+            console.log(`write complete!`)
+            return true
+        }
+        return false
+    }
+
+    static curThread = () => {
+        return Process.getCurrentThreadId().toString()
+    }
+
+    static curTime = () => {
+        const date = new Date()
+        const hour = date.getHours()
+        const _hour = (hour < 10) ? "0" + hour : hour
+        const minute = date.getMinutes()
+        const _minute = (minute < 10) ? "0" + minute : minute
+        const second = date.getSeconds()
+        const _second = (second < 10) ? "0" + second : second
+        const milli_sec = date.getMilliseconds()
+        const _milli_sec = (milli_sec < 10) ? "00" + milli_sec : (milli_sec < 100) ? "0" + milli_sec : milli_sec
+        return _hour + ":" + _minute + ":" + _second + ":" + _milli_sec
+    }
+}
+
+let info = Logger.info
+let warn = Logger.warn
+let error = Logger.error
+let debug = Logger.debug
+let stack = Logger.stack
+let save2file = Logger.save2file
+let param = function (tag, msg, log_path) {
+    warn(tag, `param-> ${msg}`, log_path)
+}
+let retval = function (tag, msg, log_path) {
+    warn(tag, `return-> ${msg}`, log_path)
+}
+//============================================
+let gson = (class Gson {
+    static ins = null
+
+    static init() {
+        if (!Java.available) {
+            throw new Error('Java is not available')
+        }
+        Java.perform(function () {
+            Java.openClassFile("/data/local/tmp/r0gson.dex").load()
+            Gson.ins = Java.use('com.r0ysue.gson.Gson').$new()
+        })
+        return Gson.toJson
+    }
+
+    static toJson(obj) {
+        return `${obj ? Gson.ins.toJson(obj) : obj} `
+    }
+}).init()
+
+//============================================
+class FridaJava {
+    static enumClassLoaders(log_path) {
+        const tag = `enumClassLoaders`
+        Java.perform(function () {
+            info(tag, `\ncurrent - loader - ${Java.classFactory.loader}`, log_path)
+            Java.enumerateClassLoaders({
+                onMatch: function (loader) {
+                    info(tag, `find loader - ${loader}`, log_path)
+                },
+                onComplete: function () {
+                }
+            })
+        })
+    }
+
+    static enumLoaderClasses(clazz, log_path) {
+        const tag = `enumLoaderClasses`
+        let is_find = false
+        Java.perform(function () {
+            Java.enumerateLoadedClasses({
+                onMatch: function (klass) {
+                    if (klass.indexOf(clazz) !== -1) {
+                        is_find = true
+                        info(tag, `find ${clazz}, info - ${klass}`, log_path)
+                    }
+                },
+                onComplete: function () {
+                    if (!is_find) {
+                        error(tag, `find not ${clazz}`)
+                    }
+                }
+            })
+        })
+    }
+
+    static enumIntent(intent, log_path) {
+        Java.perform(function () {
+            const bundle = Java.cast(intent, Java.use("android.content.Intent")).getExtras()
+            if (bundle != null) {
+                const keys = bundle['keySet']()
+                const it = keys.iterator()
+                while (it['hasNext']()) {
+                    const key = it.next()
+                    info(`FridaJava.enumIntent`, `\tintent: key - ${key}, value - ${bundle.get(key)}`, log_path)
+                }
+            }
+        })
+    }
+
+    static enumMap(map) {
+        const tag = "FridaJava.enumMap"
+        if (map != null && map.$className.indexOf("Map") !== -1) {
+            const _map = Java.cast(map, Java.use(map.$className))
+            info(tag, `map:${_map}`)
+            const entries = Java.cast(_map['entrySet'](), Java.use("java.util.Set"))
+            const it = entries["iterator"]();
+            const it_ins = Java.cast(it, Java.use("java.util.Iterator"))
+            while (it_ins["hasNext"]()) {
+                const entry = it_ins["next"]()
+                const entry_ins = Java.cast(entry, Java.use("java.util.Map$Entry"))
+                const key = entry_ins["getKey"]()
+                const value = entry_ins["getValue"]()
+                info(tag, `key(${key.$className}):${key}, value(${value.$className}):${value}`)
+            }
+            return
+        }
+        info(tag, `map is null or not Map`)
+    }
+
+    static bytes2Hex(bytes) {
+        const buffer = Java.array('byte', bytes)
+        let content = "length:" + buffer.length + " content:\r\n"
+        Java.perform(function () {
+            const Integer = Java.use("java.lang.Integer")
+            let result = ""
+            for (let i = 0; i < buffer.length; i++) {
+                if (i === 16) {
+                    result += "\r\n"
+                }
+                result += "0x" + Integer.toHexString(buffer[i] & 0xFF) + "\t"
+            }
+            content += result
+            return content
+        })
+    }
+
+    static dumpSo(so_name, log_path) {
+        const tag = `dump ${so_name}.so`
+        if (Java.available) {
+            info(tag, "Java vm true", log_path)
+            Java.perform(() => {
+                info(tag, "dump enter", log_path)
+                let currentApplication = Java.use("android.app.ActivityThread").currentApplication()
+                let dir = currentApplication['getApplicationContext']()['getFilesDir']()['getPath']()
+                info(tag, `out dir: ${dir}`, log_path)
+                let module = Process.getModuleByName(so_name)
+                info(tag, `name - ${module.name}, base - ${module.base}, size - ${module.size}, path - ${module.path}`, log_path)
+                let path = dir + "/" + module.name + "_" + module.base + "_" + ptr(module.size) + ".so"
+                Memory.protect(module.base, module.size, 'rwx')
+                const byteArray = module.base.readByteArray(module.size)
+                if (byteArray && !save2file(path, byteArray, "wb")) {
+                    error(tag, `save2file failed!`, log_path)
+                } else {
+                    warn(tag, `readByteArray failed!`, log_path)
+                }
+            })
+            info(tag, "dump leave", log_path)
+        } else {
+            error(tag, "Java vm false", log_path)
+        }
+    }
+
+    static traceMethod(method, bTraceStack, log_path) {
+        const tag = `TraceMethod.${method}`
+        Java.perform(function () {
+            const delim = method.lastIndexOf(".")
+            if (delim === -1) {
+                return
+            }
+            const clazz = method.slice(0, delim)
+            const target = method.slice(delim + 1, method.length)
+            const hook = Java.use(clazz)
+            const overloadCount = hook[target].overloads.length
+            info(tag, `traceMethod("${method}"["${overloadCount}" overload(s)]`, log_path)
+            for (let i = 0; i < overloadCount; i++) {
+                hook[target].overloads[i].implementation = function () {
+                    const retval = this[target].apply(this, arguments)
+                    warn(tag, `\n *** entered ${method}`, log_path)
+                    for (let j = 0; j < arguments.length; j++) {
+                        info(tag, `arg[${j}]: ${arguments[j]}`, log_path)
+                    }
+                    info(tag, "\nretval: " + retval, log_path)
+                    info(tag, `\nretval: ${retval}`, log_path)
+                    FridaJava.bytes2Hex(retval)
+                    if (bTraceStack) {
+                        stack(tag, null, log_path)
+                    }
+                    warn(tag, "\n*** exiting " + method, log_path)
+                    return retval
+                }
+            }
+        })
+    }
+
+    static traceClass(classes, log_path) {
+        const tag = `TraceClass.${classes}`
+        Java.perform(() => {
+            Java.enumerateLoadedClassesSync().forEach(function (clz) {
+                classes.forEach((clazz) => {
+                    if (clz.indexOf(clazz) >= 0)
+                        info(tag, `class name: ${clz}`, log_path)
+                })
+            })
+        })
+    }
+}
+
+class FridaNative {
+    static bytes2String = (bytes) => {
+        const buf = Java.array('byte', bytes)
+        let content = ""
+        for (let i = 0; i < buf.length; i++) {
+            if (buf[i] >= 32 && buf[i] <= 126) {
+                content += (String.fromCharCode(buf[i] & 0xff))
+            } else {
+                content += "."
+            }
+        }
+        return content
+    }
+
+    static dumpLuaV1 = (path, name, buff, size, log_path) => {
+        const tag = `dumpLua`
+        info(tag, `dump lua script: ${path + name}`, log_path)
+        const buffer = buff.readByteArray(size)
+        if (buffer && !save2file(path + name, buffer, "w+")) {
+            error(tag, `save2file failed!`, log_path)
+            return
+        }
+        warn(tag, `readByteArray failed!`, log_path)
+    }
+
+    static dumpLuaV2 = (path, buff, size, log_path) => {
+        const tag = `dumpLua2`
+        let data = buff.readByteArray(size)
+        if (data && !save2file(path, data, "w+")) {
+            error(tag, `${path} save2file failed!`, log_path)
+            return
+        }
+        warn(tag, `readByteArray failed!`, log_path)
+    }
+
+    static traceFunction = (fnc_names, log_path) => {
+        const tag = `traceFunction.${fnc_names} `
+        Process.enumerateModules().forEach((module) => {
+            module.enumerateExports().forEach((symbol) => {
+                fnc_names.forEach((fnc_name) => {
+                    if (symbol.name.indexOf(fnc_name) >= 0)
+                        info(tag, `module:${JSON.stringify(module)}, symbol:${JSON.stringify(symbol)} `, log_path)
+                })
+            })
+        })
+    }
+
+    static traceArt = (func_name) => {
+        let addr = null
+        Process.enumerateModules()
+            .filter((module) => {
+                return module['path'].toLowerCase().indexOf('libart.so') !== -1
+            })
+            .forEach((m) => {
+                // info(JSON.stringify(tag, m, null, '  '))
+                let symbols = m.enumerateSymbols()
+                let map = new Map()
+                let fns = [
+                    "GetStringUTFChars", "NewStringUTF", "FindClass", "GetMethodID",
+                    "GetMethodID", "GetStaticMethodID", "GetFieldID", "GetStaticFieldID",
+                    "RegisterNatives", "GetObjectClass"
+                ]
+                symbols.forEach((symbol) => {
+                    if (symbol.name.indexOf("art") >= 0
+                        && symbol.name.indexOf("JNI") >= 0
+                        && symbol.name.indexOf("CheckJNI") < 0) {
+                        fns.forEach((fnc) => {
+                            if (symbol.name.indexOf(fnc) >= 0)
+                                map.set(fnc, symbol.address)
+                        })
+                    }
+                })
+                addr = map.get(func_name)
+            })
+        return addr
+    }
+}
+
+//============================================
+
+let hook_so = "libpqul.so"
+let time = 0
+let method = ""
+let g_authSessionID = ""
+
+global.iRpc = class RPC {
+
+    static call_aes_gcm_nopadding() {
+        const tag = "call_aes_gcm_nopadding"
+        Java.perform(function () {
+            const aes = Java.array('byte', [4, -23, 8, -72, 114, -7, 27, -15, -61, -59, -124, -72, -51, 30, 69, -93, -75, 48, -28, -72, -106, -89, 37, -5, -115, 41, -52, -109, -25, 49, 27, -26])
+            const gcm = Java.array('byte', [0, 0, 0, 0, 0, 0, 0, 29, 104, -91, 35, 54])
+            const aad = Java.array('byte', [117,102,53,50,55,51,56,49,52,54,97,51,51,98,57,100,97,97,101,101,52,101,49,100,48,48,48,51,50,101,100,98,48,117,50,97,56,97,56,55,50,49,49,55,51,48,55,102,101,98,56,102,57,50,51,100,49,48,54,55,56,100,100,52,54,53,0,69,-93,-108,0,69,-76,88,0,0,0,2,0,0,0,0])
+            const text = Java.array('byte', [123, 34, 116, 101, 120, 116, 34, 58, 34, 104, 101, 108, 108, 111, 34, 125])
+            const secretKeySpec = Java.use('javax.crypto.spec.SecretKeySpec').$new(aes, "AES")
+            info(tag, `secretKeySpec:${secretKeySpec}`)
+            const gCMParameterSpec = Java.use('javax.crypto.spec.GCMParameterSpec').$new(128, gcm)
+            info(tag, `gCMParameterSpec:${gCMParameterSpec}`)
+            const cipher = Java.use("javax.crypto.Cipher")['getInstance']("AES/GCM/NoPadding")
+            info(tag, `cipher:${cipher}`)
+            cipher['init'](1, secretKeySpec, gCMParameterSpec)
+            cipher['updateAAD'](aad)
+            let r = cipher['doFinal'](text)
+            info(tag, `r:${gson(r)}`)
+            // r:RTiACE1Izz02UxsZnvmBlY3ypuUOkrdWKC5/U8OJYkxtXdyr4R2BBx5dQ3X6SfN1
+        })
+    }
+
+    static call_encrypted() {
+        const tag = "call_encrypted"
+        Java.perform(function () {
+            const privateKey = Java.array('byte', [0x68, 0xb6, 0x57, 0x04, 0xeb, 0x86, 0x4e, 0x42, 0x2c, 0x62, 0x02, 0x1a, 0x4f, 0xb9, 0x26, 0x8d, 0x9c, 0x71, 0xc2, 0xe0, 0x15, 0xae, 0x9d, 0x27, 0x1d, 0x4f, 0x70, 0xe4, 0x05, 0xd8, 0x98, 0x6a])
+            const nonce = Java.array('byte', [0x87, 0x66, 0xa4, 0x84, 0x67, 0xe2, 0xef, 0x3d, 0xfe, 0x31, 0x46, 0x89, 0x45, 0x69, 0x6e, 0xef])
+            const exchangeKey = Java.array('byte', [0x2d, 0xb5, 0x30, 0xfe, 0x72, 0x2d, 0x70, 0x4e, 0x53, 0x18, 0x7d, 0x28, 0x63, 0x6d, 0x48, 0x42, 0xb9, 0x1f, 0x27, 0x92, 0xa6, 0x19, 0x95, 0xa9, 0xeb, 0x33, 0x04, 0x00, 0x7f, 0x96, 0x23, 0x35])
+            const exchangeNonce = Java.array('byte', [0xf6, 0xb6, 0x8a, 0xee, 0x10, 0xcb, 0x70, 0x94, 0x6b, 0xde, 0x3e, 0x58, 0xb9, 0x34, 0xb7, 0xc9])
+            const password = "Aa654321"
+            let vl0 = Java.use("com.google.android.gms.internal.ads.vl0")
+            let r = vl0['q'](privateKey, nonce, exchangeKey, exchangeNonce, password)
+            info(tag, `r:${r}`)
+            // r:RTiACE1Izz02UxsZnvmBlY3ypuUOkrdWKC5/U8OJYkxtXdyr4R2BBx5dQ3X6SfN1
+        })
+    }
+
+    static call_key_pair() {
+        const tag = `call_key_pair`
+        Java.perform(() => {
+            let c = Java.use("i85.c")
+            let r = c["e"]()
+            let ins = Java.cast(r, Java.use("i85.c$a"))
+            warn(tag, `ins:${gson(ins)}`)
+            let pubKey = ins['a'].value
+            let priKey = ins['b'].value
+            info(tag, `pubKey${pubKey.length}:${pubKey}`)
+            info(tag, `priKey${priKey.length}:${priKey}`)
+        })
+    }
+
+    static call_base64_decode() {
+        const tag = `call_base64_decode`
+        Java.perform(() => {
+            let Base64 = Java.use("android.util.Base64")
+            let r = Base64['decode']("A/C0HeovB0F8ni/vimwPYA03U+h9YYH6HTpM9uChr2Q=", 2)
+            info(tag, `r:${r}`)
+        })
+    }
+
+    static call_exchange_key_calc() {
+        const tag = "call_exchange_key_calc"
+        Java.perform(() => {
+            const Security = Java.use("i85.c")
+            const pubKey = Java.array('byte', [0, -55, -104, 94, 39, -115, 47, -113, 97, -106, 14, 80, 42, -33, -27, -80, -55, 123, -120, 63, 51, -113, -1, -97, -60, -116, -17, -5, -66, 30, -69, 95])
+            const priKey = Java.array('byte', [8, 53, -107, 94, 112, -64, 101, -40, -47, 121, -14, 71, -93, -76, -81, 70, 123, -79, 65, 91, 19, 99, -14, -54, -48, 39, -101, 32, 67, -46, 14, 95])
+            let r = Security["g"](priKey, pubKey)
+            info(tag, `exchange key:${r}`)
+            // -99,57,45,-60,88,-83,60,11,-50,68,24,82,124,-58,-84,-118,-66,-105,47,-3,-44,122,-75,48,95,127,21,15,92,110,70,86
+
+            const MessageDigest = Java.use(`java.security.MessageDigest`)
+            const ins = MessageDigest.getInstance("SHA-256")
+            ins.update(r)
+            r = ins.digest()
+            info(tag, `sha256:${r}`)
+        })
+    }
+
+    static call_aes_cbc_pkcs7padding() {
+        const tag = "call_aes_cbc_pkcs7padding"
+        Java.perform(() => {
+            let Security = Java.use("i85.c")
+            const keySpec = Java.array('byte', [-78, 48, -5, 91, -41, -42, 78, 103, -10, -128, -80, -126, -115, 112, -13, 49])
+            const ivSpec = Java.array('byte', [-105, 64, -96, -10, 92, -81, 124, -11, 94, -54, -50, -108, 34, -115, -71, 28])
+            const algorithm = "AES/CBC/PKCS7Padding"
+            const text = Java.array('byte', [65, 97, 54, 53, 52, 51, 50, 49])
+            let r = Security["b"](keySpec, ivSpec, algorithm, text)
+            info(tag, `r:${r}`)
+            // -18,122,23,95,77,65,119,40,47,17,-102,58,47,11,-51,-23
+        })
+    }
+
+    static call_HmacSHA256() {
+        const tag = "call_HmacSHA256"
+        Java.perform(() => {
+            //  Mac mac = Mac.getInstance("HmacSHA256")
+            const Mac = Java.use("javax.crypto.Mac")
+            const ins = Mac.getInstance("HmacSHA256")
+            const keySpec = Java.array('byte', [-40, -6, -7, 96, -55, -103, 72, -54, -22, 113, -30, -12, -69, 108, 74, -34, 83, -50, -33, -81, -37, 115, 116, 40, -2, -107, -46, -89, -95, -86, -73, -92])
+            const text = Java.array('byte', [65, 97, 54, 53, 52, 51, 50, 49])
+            // new SecretKeySpec(sha2563, "HmacSHA256")
+            const SecretKeySpec = Java.use("javax.crypto.spec.SecretKeySpec")
+            const key = SecretKeySpec.$new(keySpec, "HmacSHA256")
+            info(tag, `key:${key}`)
+            ins.init(key)
+            let r = ins['doFinal'](text)
+            info(tag, `r:${r}`)
+            //r:44,8,-7,15,24,51,-37,25,84,5,-6,114,115,34,39,98,-16,-75,83,44,39,-39,90,66,-59,117,-2,-36,-63,71,-21,125
+        })
+    }
+
+    static call_getTalkServiceClientImpl() {
+        const tag = `jb5.x`
+        Java.perform(() => {
+            const x = Java.use("jb5.x")
+            const r = x["e"]()
+            info(tag, `r:${r ? r.$className : r}`)
+        })
+    }
+
+    static call_encryptedAuthToken() {
+        const authToken = "u4847a3534bfdcbb4a5aa5c2f9741e8aa:ITjp2n8RKQZeSkd6gdEL";
+        const p4 = Java.use("com.google.android.gms.internal.vision.p4")
+        const r = p4['l'](authToken)
+        retval("call_encryptedAuthToken", `${r}`)
+    }
+};
+
+function AntiAntiFrida() {
+    start()
+
+    function start() {
+        const tag = `AntiAntiFrida.start`
+        const linker = Process.pointerSize === 4 ? Process.findModuleByName("linker") : Process.findModuleByName("linker64")
+        // info(tag, `linker:${linker ? linker.name : linker}`)
+        if (linker) {
+            const symbols = linker.enumerateSymbols()
+            // info(tag, `symbols:${symbols ? symbols.length : symbols}`)
+            symbols.forEach(ele => {
+                // if (ele.name.indexOf("call_") != -1) {
+                //     info(tag, `name:${ele.name}`)
+                // }
+                if (ele.name.indexOf("__dl__ZN6soinfo17call_constructorsEv") !== -1
+                    // || name.indexOf("__dl__ZN6soinfo26call_pre_init_constructorsEv") != -1
+                    // || name.indexOf("__dl__ZNSt3__111__call_onceERVmPvPFvS2_E") != -1
+                ) {
+                    // info(tag, `${ele.name}:${ele.address}`)
+                    hook()
+                }
+
+                function hook() {
+                    Interceptor.attach(ele.address, {
+                        onEnter() {
+                            let so = Process.findModuleByName(hook_so)
+                            // info(tag, `${hook_so}:${so ? so.base : so}`)
+                            if (so?.base) {
+                                if (time === 0) {
+                                    let symbols = so.enumerateSymbols()
+                                    symbols.forEach(ele => {
+                                        if (ele.name.indexOf('startAntiFridaEv') !== -1) {
+                                            // info(tag, `${ele.name}:${ele.address}`)
+                                            // mss::core::security::DebuggingService::startAntiFrida()
+                                            // let startAntiFrida = new NativeFunction(ele.address, 'void', ['void'])
+                                            Interceptor.replace(ele.address, new NativeCallback(() => {
+                                                info(tag, `patch startAntiFrida`)
+                                            }, 'void', []))
+                                        }
+                                    })
+                                    time++
+                                }
+                            }
+                        },
+                        onLeave() {
+                        },
+                    })
+                }
+            })
+        }
+    }
+}
+
+class FridaScript {
+    static LineRegister() {
+        openSession()
+        exchangeEncryptionKey()
+        setPassword()
+        // b74()
+        // w64()
+
+        function w64() {
+            Event()
+
+            // 抓取 /tr/event 的数据
+            function Event() {
+                let b = Java.use("w64.e$b")
+                b["a"].implementation = function (content) {
+                    const tag = "Event.handleData"
+                    info(tag, `enter`)
+                    param(tag, `content: ${gson(content)}`)
+                    // stack(tag)
+                    this["a"](content)
+                    info(tag, `leave`)
+                }
+            }
+        }
+
+        function b74() {
+            HttpRequest()
+            HttpError()
+
+            function HttpRequest() {
+                const HttpRequest = Java.use("b74.b")
+                HttpRequest['$init'].implementation = function (urlHost, urlPath, headers, content) {
+                    const tag = "HttpRequest.$init"
+                    info(tag, `enter`)
+                    param(tag, `urlHost:${urlHost}`)
+                    param(tag, `urlPath:${urlPath}`)
+                    param(tag, `headers:${headers}`)
+                    param(tag, `content:${content}`)
+                    // stack(tag)
+                    this['$init'](urlHost, urlPath, headers, content)
+                    info(tag, `leave`)
+                }
+                HttpRequest['a'].implementation = function () {
+                    const tag = "HttpRequest.deflater"
+                    info(tag, `enter`)
+                    // stack(tag)
+                    this['a']()
+                    info(tag, `leave`)
+                }
+            }
+
+            function HttpError() {
+                const HttpError = Java.use("b74.c")
+                HttpError['$init'].overload('int', 'java.util.Map', 'java.lang.String').implementation = function (code, header, message) {
+                    const tag = "HttpError.$init"
+                    info(tag, `enter`)
+                    param(tag, `code:${code}`)
+                    param(tag, `header:${gson(header)}`)
+                    param(tag, `message:${message}`)
+                    // stack(tag)
+                    this['$init'](code, header, message)
+                    info(tag, `leave`)
+                }
+            }
+        }
+
+        function setPassword() {
+            // a()
+            // ClientExchangeKey()
+            // vl0()
+            // ArrayUtils()
+
+            function a() {
+                const a = Java.use("i85.a")
+                a["b"].implementation = function (out, p1, p2) {
+                    const tag = "i85.a.b"
+                    info(tag, `enter`)
+                    param(tag, `out:${out}`)
+                    param(tag, `p1:${p1}`)
+                    param(tag, `p2:${p2}`)
+                    // stack(tag)
+                    this["b"](out, p1, p2)
+                    retval(tag, `out:${gson(out)}`)
+                    info(tag, `leave`)
+                }
+            }
+
+            function ClientExchangeKey() {
+                const ClientExchangeKey = Java.use("gy3.g")
+                ClientExchangeKey["a"].implementation = function (clientKeys, rawPassword, serverExchangeKey) {
+                    const tag = "ClientExchangeKey.encrypted"
+                    param(tag, `clientKeys: ${gson(clientKeys)}`)
+                    param(tag, `rawPassword:${rawPassword}`)
+                    param(tag, `serverExchangeKey: ${gson(serverExchangeKey)}`)
+                    // stack(tag)
+                    const password = this["a"](clientKeys, rawPassword, serverExchangeKey)
+                    retval(tag, `${gson(password)}`)
+                    return password
+                }
+            }
+
+            function vl0() {
+                let vl0 = Java.use("com.google.android.gms.internal.ads.vl0")
+                vl0["q"].implementation = function (clientPrivateKey, clientNonce, serverPublicKey, serverNonce, plainText) {
+                    const tag = "vl0.encrypted"
+                    param(tag, `clientPrivateKey: ${clientPrivateKey}`)
+                    param(tag, `clientNonce: ${clientNonce}`)
+                    param(tag, `serverPublicKey: ${serverPublicKey}`)
+                    param(tag, `serverNonce: ${serverNonce}`)
+                    param(tag, `plainText: ${plainText}`)
+                    // stack(tag)
+                    error(tag, `当前是固定值`)
+                    let r = this["q"](clientPrivateKey, clientNonce, serverPublicKey, serverNonce, plainText)
+                    retval(tag, `${r}`)
+                    return r
+                }
+            }
+
+            function ArrayUtils() {
+                let ArrayUtils = Java.use("pc5.o")
+                ArrayUtils["r"].implementation = function (p1, p2) {
+                    const tag = "ArrayUtils.splice"
+                    param(tag, `p1: ${p1}`)
+                    param(tag, `p2: ${p2}`)
+                    let r = this["r"](p1, p2)
+                    retval(tag, `${r}`)
+                    return r
+                }
+            }
+        }
+
+        function exchangeEncryptionKey() {
+            // e()
+
+            function e() {
+                let e = Java.use("ty3.e")
+                e["p7"].implementation = function (authSessionID, continuation) {
+                    const tag = "e.handleExchangeEncryptionKey"
+                    param(tag, `authSessionID: ${authSessionID}`)
+                    param(tag, `continuation: ${continuation}`)
+                    // stack(tag)
+                    const context = this["e"].value
+                    const const_ins = Java.cast(context, Java.use("gy3.n"))
+                    const clientExchangeKey = const_ins['_g'].value
+                    const clientExchangeKey_ins = Java.cast(clientExchangeKey, Java.use("gy3.g"))
+                    info(tag, `clientExchangeKey:${gson(clientExchangeKey_ins)}`)
+                    if (authSessionID === g_authSessionID) {
+                        error(tag, `catch call exchangeEncryptionKey`)
+                        const keyPair = clientExchangeKey_ins['_a'].value
+                        if (keyPair) {
+                            info(tag, `keyPari in not null`)
+                            // info(tag, `当前是固定值`)
+                            // const keyPair_ins = Java.cast(keyPair, Java.use("i85.c$a"))
+                            // let pubKey = Java.array('byte', [-75, -12, -64, 67, -73, 55, -40, 45, 6, 12, 121, 79, 74, 11, -126, 12, -93, -91, 18, -47, 87, -12, 85, 30, 83, -10, 82, 77, 7, 7, -97, 117])
+                            // let priKey = Java.array('byte', [24, -105, -11, 32, -43, 122, -87, -102, -35, 90, -128, -79, -53, -74, -8, -126, -111, 105, -83, -30, -55, -41, -117, 110, -33, 49, -82, 85, -12, -118, -34, 100])
+                            // let nonce = Java.array('byte', [38, 81, -18, -26, 20, -44, 78, 76, -51, -116, -117, -76, 7, -98, -17, -124])
+                            // keyPair_ins['a'].value = pubKey
+                            // keyPair_ins['b'].value = priKey
+                            // clientExchangeKey_ins['_b'].value = nonce
+                        } else {
+                            info(tag, `keyPair is null`)
+                        }
+                    }
+                    let r = this["p7"](authSessionID, continuation)
+                    info(tag, `clientExchangeKey: ${gson(clientExchangeKey_ins)}`)
+                    retval(tag, `${gson(r)}`)
+                    return r
+                }
+            }
+        }
+
+        function openSession() {
+            // opensession_args()
+            // opensession_result()
+            // opensession_args_StandardSchemeImpl()
+            // opensession_args_TupleSchemeImpl()
+            // opensession_result_StandardSchemeImpl()
+            // opensession_result_TupleSchemeImpl()
+            // sz_d()
+
+            // 为了得到 opensession 中 request 中的 tags 的 timeout 的值
+            function sz_d() {
+                let d = Java.use("sz.d")
+                d["e"].implementation = function (builder, val) {
+                    const tag = "sz.d.e"
+                    param(tag, `builder:${builder}, val:${val}`)
+                    // stack(tag)
+                    this["e"](builder, val)
+                }
+            }
+
+            function opensession_result_TupleSchemeImpl() {
+                const opensession_result_TupleSchemeImpl = Java.use("x12.o1$d")
+                opensession_result_TupleSchemeImpl["b"].implementation = function (iprot, result) {
+                    const tag = "opensession_result_TupleSchemeImpl.read"
+                    info(tag, `enter`)
+                    // param(tag, `"iprot": ${gson(iprot)}`)
+                    // param(tag, `"result": ${gson(result)}`)
+                    // stack(tag)
+                    this["b"](iprot, result)
+                    info(tag, `leave`)
+                }
+            }
+
+            function opensession_result_StandardSchemeImpl() {
+                const opensession_result_StandardSchemeImpl = Java.use("x12.o1$b")
+                opensession_result_StandardSchemeImpl["b"].implementation = function (iprot, result) {
+                    const tag = "opensession_result_StandardSchemeImpl.read"
+                    info(tag, `enter`)
+                    // param(tag, `"iprot": ${gson(iprot)}`)
+                    // param(tag, `"result": ${gson(result)}`)
+                    // stack(tag)
+                    this["b"](iprot, result)
+                    info(tag, `leave`)
+                }
+            }
+
+            function opensession_args_TupleSchemeImpl() {
+                const opensession_args_TupleSchemeImpl = Java.use("x12.n1$d")
+                opensession_args_TupleSchemeImpl["a"].implementation = function (oprot, args) {
+                    const tag = "opensession_args_TupleSchemeImpl.write"
+                    param(tag, `oprot: ${gson(oprot)}`)
+                    param(tag, `args: ${gson(args)}`)
+                    // stack(tag)
+                    this["a"](oprot, args)
+                }
+            }
+
+            function opensession_args_StandardSchemeImpl() {
+                const opensession_args_StandardSchemeImpl = Java.use("x12.n1$b")
+                opensession_args_StandardSchemeImpl["a"].implementation = function (oprot, args) {
+                    const tag = "opensession_args_StandardSchemeImpl.write"
+                    param(tag, `oprot: ${gson(oprot)}`)
+                    param(tag, `args: ${gson(args)}`)
+                    // stack(tag)
+                    this["a"](oprot, args)
+                }
+            }
+
+            function opensession_result() {
+                const opensession_result = Java.use('x12.o1')
+                opensession_result["read"].implementation = function (p1) {
+                    const tag = "opensession_result.read"
+                    param(tag, `p1: ${gson(p1)}`)
+                    // stack(tag)
+                    this["read"](p1)
+                }
+                opensession_result["write"].implementation = function (p1) {
+                    const tag = "opensession_result.write"
+                    param(tag, `p1: ${gson(p1)}`)
+                    // stack(tag)
+                    this["write"](p1)
+                }
+            }
+
+            function opensession_args() {
+                const opensession_args = Java.use('x12.n1')
+                opensession_args["read"].implementation = function (p1) {
+                    const tag = "opensession_args.read"
+                    param(tag, `p1:${gson(p1)}`)
+                    // stack(tag)
+                    this["read"](p1)
+                }
+                opensession_args["write"].implementation = function (p1) {
+                    const tag = "opensession_args.write"
+                    param(tag, `p1:${gson(p1)}`)
+                    // stack(tag)
+                    this["write"](p1)
+                }
+            }
+        }
+    }
+
+    static LineUserProfileImage() {
+        upload()
+
+        function upload() {
+            /* https://obs.line-apps.com/r/talk/p/u8552dbd617b897c0ec0772ffd0a35e6b
+            * x-obs-params: eyJ2ZXIiOiIyLjAiLCJuYW1lIjoicHJvZmlsZV8xNjk3NzE2MjEzMDI5LmpwZyIsInJhbmdlIjoiYnl0ZXMgMC00NTU1MFwvNDU1NTEiLCJ0eXBlIjoiSU1BR0UifQ==
+            *   这是一个base64编码的json数据, 解码后得到:{"ver":"2.0","name":"profile_1697716213029.jpg","range":"bytes 0-45550\/45551","type":"IMAGE"}
+            *   构造点在: q95.b.a
+            * x-talk-meta: eyJwcm9maWxlQ29udGV4dCI6eyJzdG9yeVNoYXJlIjpmYWxzZX19
+            *   这是一个base64编码的json数据, 解码后得到:{"profileContext":{"storyShare":false}}
+            *   沟在点在: i12.d$a.c
+            * x-line-access: TTJv6nvh1NoakGatiG0gvi6qtoNdS1CSldU8etGtAOOSy1WOuNh0baDFCVTXtzDyVTrUN6lJgU0GTRqnQjAcsg9MbcpAgktP4Jo7tZ7OXHcsuhTQslWN9iR7CfVBhYng0mqD86zGMGoozjw9OrgWCKNfoRku2FIyRI/xDy0qKi98UkSGU1EzeW5nZp1OJL9YHyUCshuljh1Gr0VriT5ZNZUMsde9kLJC6G6nMVDNQQbijvwWGq7Bpcr4GxkOig1t1jukxS/q6runzdZTH9/tqt+ibjHDpTfvZje/IyaQSsefeGxHolrelFDGf3gv7ODrxu7YCeU6l3TEKtRt1hBojr8GheNBR63laoKU4jkXUEysSuzl9yrYEx+x69cSGMyWAJVFLc5eJwxXpjfQW12keTK6GS/tZ03/28lBPBD20c15bvmv1zjKP7Sc2UTki7v8kRQKtX9x2Cipir2zbrGJb3FEv0/ZqexaNUCpyqrKT41Ud6tHn+dkx0pwmPRnVmOGPeuaMj/J52UaFPYc8BKNIZj0Eg4N4ZDQ4hal1nN2qs7cUefo92fFcFHwq0VFWYFtOF3otaV1VdIkVJV8/m/ff4nD/ZFNqFm8wx+pQME+hT2IR0dya0Q/qVygrFAYCxUslmFypOYXlnz9PUs7i//ebc4+G00liDj5yR8gFlgF5LoI1QocxMpzFqwA3/3JBgU5VW1K4j6DbwNxBPtMsmLLsY/s4nuMqkgFVK9mZaj9IfNEvYrbmhYvTEbgcpQJO8shS9sPxvTCYigHAPMTHlrFU+KXw5I2mWeWaKOzfCadkVEKvetVV35VphGfiLPK3zzqJ4OmYK+S8cDcNoYpswu+Qqjmxx2ZHV2DjwI94EErxxKh8MrwBV7kG69pBzOBedX3WZ9tLDp5bZ8SsxgZnd6/ci9HcKEdRQJFpM652k86g9gGo/uk+VOTAUb1kc1l9BwJwdbazo9SS5N5VUKywZ3zDkSH7T5EnPkdX6KTuWJkMyjY6u9MBNhTwoqZa86xRwPK+xmnus0Co9lgJLoXBDrRUbqOVkoC/iSAVclLasi+s4b+Gcgm6mjiaFCHuGEpnsDiwVcCA5IbJT9E+uMQodLTIkUNGgJKR07ihLtr/N+Pc87q9FhSRMnpk9/UPeNKj03i0y0M9W+3UR0OvKYmJaUFp1k7Ukk0OttY6b/Yzr2WTlA6levbs79GG0HQLBS/ZLFyIGzM7k4VEMLjppHoHQjiAF+7ngn5bpbKVtbDeD+13umVDLHXvZCyQuhupzFQzUEGcFdzbR9Bwx4LAfzU3GBLPf/jOatQaF4wEAkBkOIwLxOnGDnt4K03AQUV53ci4BKORo9NACGdjTLYNfQ2QPEYOtdfW31Hd1FRTEcLqBKDrKQ=
+            *   access_token 的加密数据
+            *   构造点在: gm1.d.e
+            * */
+
+            em1()
+            im1()
+            // gm1()
+            // q95()
+            // am1()
+            // p45()
+
+            // 发送数据
+            function em1() {
+                c()
+
+                function c() {
+                    let HttpURLHandler = Java.use("em1.c")
+                    HttpURLHandler['D'].implementation = function (data, p1, p2) {
+                        const tag = `em1.HttpURLHandler.realHandleRequest`
+                        info(tag, `enter`)
+                        let value = this['c'];
+                        info(tag, `connection: ${value}, class:${value.$className}`)
+                        param(tag, `data:${gson(data)}`)
+                        param(tag, `p1(${p1.$className}):${gson(p1)}`)
+                        param(tag, `p2(${p2 != null ? p2.$className : null}):${gson(p2)}`)
+                        // stack(tag)
+                        let r = this['D'](data, p1, p2)
+                        retval(tag, `${gson(r)}`)
+                        info(tag, `leave`)
+                        return r
+                    }
+
+                    HttpURLHandler['$init'].implementation = function (urlStr) {
+                        const tag = `em1.HttpURLHandler.init`
+                        info(tag, `enter`)
+                        param(tag, `urlStr:${urlStr}`)
+                        // stack(tag)
+                        this['$new'](urlStr)
+                        info(tag, `leave`)
+                    }
+                }
+            }
+
+            // 抓取 x-line-access
+            function p45() {
+                c()
+
+                function c() {
+                    let c = Java.use(`p45.c`);
+                    c['b'].implementation = function () {
+                        const tag = `p45.c.getEncryptedAccessToken`;
+                        info(tag, `enter`);
+                        const this_a = Java.cast(this['_a'].value, Java.use(`p45.b`))
+                        info(tag, `a type:${this_a['a'].value}`)
+                        info(tag, `e createTime:${this_a['e'].value}`)
+                        info(tag, `c encrytped_access_token:${this_a['c'].value}`)
+                        info(tag, `d interval:${this_a['d'].value}`)
+                        // stack(tag);
+                        let r = this['b']();
+                        retval(tag, `${r}`);
+                        info(tag, `leave`);
+                        return r;
+                    }
+                }
+            }
+
+            function am1() {
+                a()
+
+                function a() {
+                    let a = Java.use(`am1.a`)
+                    a['c'].implementation = function () {
+                        const tag = `am1.a.c`
+                        info(tag, `enter`)
+                        // stack(tag)
+                        let r = this['c']()
+                        retval(tag, `${r.$className}`)
+                        info(tag, `leave`)
+                        return r
+                    }
+                }
+            }
+
+            // 抓取 x-talk-meta
+            function q95() {
+                b$c()
+
+                function b$c() {
+                    let b$c = Java.use("q95.b$c")
+                    b$c["$init"].overload('java.io.InputStream', 'int', 'java.util.Map').implementation = function (is, fileSize, header) {
+                        const tag = `q95.b$c.$init`
+                        info(tag, `enter`)
+                        param(tag, `inputStream:${is}`)
+                        param(tag, `fileSize:${fileSize}`)
+                        param(tag, `header:${gson(header)}`)
+                        // stack(tag)
+                        /*  [10:58:39:971 - 19772 - error - ]  >>>>>	q95.b$c.$init 	start
+                            [10:58:39:975 - 19772 - info - q95.b$c.$init] 	q95.b$c.<init>(Native Method)
+                            [10:58:39:975 - 19772 - info - q95.b$c.$init] 	q95.j.b(Unknown Source:31)
+                            [10:58:39:975 - 19772 - info - q95.b$c.$init] 	c25.e.c(Unknown Source:153)
+                            [10:58:39:976 - 19772 - info - q95.b$c.$init] 	c25.e.f(Unknown Source:399)
+                            [10:58:39:976 - 19772 - info - q95.b$c.$init] 	jp.naver.line.android.activity.imageviewer.ImageViewerActivity.onActivityResult(Unknown Source:36)
+                            [10:58:39:978 - 19772 - error - ]  >>>>>	q95.b$c.$init 	end
+                        */
+                        this["$new"](is, fileSize, header)
+                        info(tag, `leave`)
+                    }
+                }
+            }
+
+            // 处理请求头
+            function gm1() {
+                d()
+
+                function d() {
+                    let d = Java.use("gm1.d")
+                    d["g"].implementation = function (map) {
+                        const tag = `gm1.d.addHeader`
+                        info(tag, `enter`)
+                        param(tag, `map:${map}`)
+                        // stack(tag)
+                        info(tag, `this:${this.$className}`)
+                        this["g"](map)
+                        info(tag, `leave`)
+                    }
+                    d["e"].implementation = function (header, z) {
+                        const tag = `gm1.d.handleHeader`
+                        info(tag, `enter`)
+                        param(tag, `headers:${gson(header)}`)
+                        param(tag, `z:${z}`)
+                        // stack(tag)
+                        this["e"](header, z)
+                        info(tag, `leave`)
+                        header = this['c']()
+                        info(tag, `header:${gson(header)}`)
+                    }
+                }
+            }
+
+            // 这里就是将头像数据发送出去的地方
+            function im1() {
+                l()
+                d()
+
+                function l() {
+                    let l = Java.use("im1.l")
+                    l["h"].implementation = function (inputStream, p2) {
+                        const tag = `im1.l.handleRequest`
+                        info(tag, `enter`)
+                        param(tag, `inputStream:${inputStream}`)
+                        param(tag, `p2:${p2}`)
+                        param(tag, `this:${gson(this)}`)
+                        // stack(tag)
+                        /*  [10:08:19:595 - 19891 - error - ]  >>>>>	im1.l.handleRequest 	start
+                            [10:08:19:596 - 19891 - info - im1.l.handleRequest] 	im1.l.h(Native Method)
+                            [10:08:19:596 - 19891 - info - im1.l.handleRequest] 	zl1.f.a(Unknown Source:40)
+                            [10:08:19:596 - 19891 - info - im1.l.handleRequest] 	tl1.a.h(Unknown Source:38)
+                            [10:08:19:596 - 19891 - info - im1.l.handleRequest] 	q95.b.a(Unknown Source:90)
+                            [10:08:19:596 - 19891 - info - im1.l.handleRequest] 	q95.e.doInBackground(Unknown Source:15)
+                            [10:08:19:598 - 19891 - error - ]  >>>>>	im1.l.handleRequest 	end
+                        * */
+                        let r = this["h"](inputStream, p2)
+                        retval(tag, `${r}`)
+                        info(tag, `leave`)
+                        return r
+                    }
+
+                    l["a"].implementation = function () {
+                        const tag = `im1.l.openConnection`
+                        info(tag, `enter`)
+                        let r = this['a']()
+                        retval(tag, `${r}, className: ${r.$className}`)
+                        info(tag, `leave`)
+                        return r
+                    }
+
+                    // l["$init"].implementation = function (url, fileSize, params, interface1, interface2, header, bool) {
+                    //     const tag = `im1.l.init`
+                    //     info(tag, `enter`)
+                    //     param(tag, `url:${url}`)
+                    //     param(tag, `fileSize:${fileSize}`)
+                    //     param(tag, `params:${params}`)
+                    //     param(tag, `interface1:${interface1}, className: ${interface1.$className}`)
+                    //     param(tag, `interface2:${interface2}, className: ${interface2.$className}`)
+                    //     param(tag, `header:${header}`)
+                    //     param(tag, `bool:${bool}`)
+                    //     stack(tag)
+                    //     this["$init"](url, fileSize, params, interface1, interface2, header, bool)
+                    //     info(tag, `leave`)
+                    // }
+                }
+
+                function d() {
+                    let d = Java.use("im1.d")
+                    d["e"].implementation = function (p1, p2, p3) {
+                        const tag = `im1.d.superHandleRequest`
+                        info(tag, `enter`)
+                        param(tag, `p1:${p1}`)
+                        param(tag, `p2:${p2}`)
+                        param(tag, `p3:${gson(p3)}`)
+                        // stack(tag)
+                        let r = this["e"](p1, p2, p3)
+                        retval(tag, `${gson(r)}`)
+                        info(tag, `leave`)
+                        return r
+                    }
+
+                    d['a'].implementation = function () {
+                        const tag = `im1.d.openHttpConnection`
+                        info(tag, `enter`)
+                        let r = this['a']()
+                        retval(tag, `${r.$className}`)
+                        info(tag, `leave`)
+                        return r
+                    }
+                }
+            }
+
+
+            // 这个是 getProfile 才会用到
+            function v95() {
+                let OBSUrlBuilder = Java.use("v95.b")
+                // public static final String g_buildUrl(OpType type, String serviceName, String objectStorageName, String objectId) {
+                OBSUrlBuilder['g'].implementation = function (type, serviceName, objectStorageName, objectId) {
+                    const tag = `v95.OBSUrlBuilder.buildUrl`
+                    info(tag, `enter`)
+                    param(tag, `type:${type}`)
+                    param(tag, `serviceName:${serviceName}`)
+                    param(tag, `objectStorageName:${objectStorageName}`)
+                    param(tag, `objectId:${objectId}`)
+                    // stack(tag)
+                    let r = this['g'](type, serviceName, objectStorageName, objectId)
+                    retval(tag, `${r}`)
+                    info(tag, `leave`)
+                    return r
+                }
+                // public static String j(ObsUrlParameter param) {
+                OBSUrlBuilder['j'].implementation = function (p) {
+                    const tag = `v95.OBSUrlBuilder.j`
+                    info(tag, `enter`)
+                    param(tag, `ObsUrlParameter:${gson(p)}`)
+                    // stack(tag)
+                    let r = OBSUrlBuilder['j'](p)
+                    retval(tag, `${r}`)
+                    info(tag, `leave`)
+                    return r
+                }
+            }
+        }
+    }
+
+    static LineAccessToken() {
+        accessToken()
+
+        function accessToken() {
+            LegacyTalkServiceClientImpl()
+
+            function LegacyTalkServiceClientImpl() {
+                const LegacyTalkServiceClientImpl = Java.use("jp.naver.line.android.thrift.client.impl.LegacyTalkServiceClientImpl")
+                LegacyTalkServiceClientImpl.C1.implementation = function (type) {
+                    const tag = "LegacyTalkServiceClientImpl.acquireEncryptedAccessToken"
+                    info(tag, `enter`)
+                    param(tag, `type:${type}`)
+                    // stack(tag)
+                    let r = this["C1"](type)
+                    retval(tag, `${r}`)
+                    info(tag, `leave`)
+                    return r
+                }
+            }
+        }
+    }
+
+    static LineContact() {
+        // sz();
+        fz();
+        nt();
+        p4();
+
+        // 返回值就是 x-line-access
+        function p4() {
+            let p4 = Java.use("com.google.android.gms.internal.vision.p4")
+            p4["l"].implementation = function (authToken) {
+                const tag = `p4.encryptedAuthToken`
+                info(tag, `enter`)
+                param(tag, `authToken:${authToken}`)
+                // stack(tag)
+                let r = this["l"](authToken)
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        function nt() {
+            let v1TokenMigrationHelper = Java.use("nt.b")
+            v1TokenMigrationHelper['d'].implementation = function () {
+                const tag = "v1TokenMigrationHelper.getAccessToken"
+                info(tag, `enter`)
+                const INSTANCE = Java.use("da5.a")["_a"].value;
+                info(tag, `INSTANCE(${INSTANCE.$className}):${gson(INSTANCE)}`)
+                // stack(tag)
+                let r = this['d']()
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        function fz() {
+            //fz.q.a
+            let q = Java.use("fz.q")
+            q["a"].implementation = function () {
+                const tag = "fz.q.getAccessToken"
+                info(tag, `enter`)
+                const v1TokenMigrationHelper = this["_a"].value;
+                info(tag, `v1TokenMigrationHelper(${v1TokenMigrationHelper.$className}):${v1TokenMigrationHelper}`)
+                const credentialRepository = this["_c"].value
+                info(tag, `credentialRepository(${credentialRepository.$className}):${credentialRepository}`)
+                const legyDebugConfig = this["_d"].value
+                info(tag, `legyDebugConfig(${legyDebugConfig.$className}):${legyDebugConfig}`)
+                info(tag, `isAuthTokenV1:${v1TokenMigrationHelper['a']()}`)
+                info(tag, `authToken:${Java.use("s55.b")["b"]()["getAuthToken"]()}`)
+                // stack(tag)
+                let r = this["a"]()
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        // 为了获取 x-line-access 数据
+        function sz() {
+            let b = Java.use("sz.d$b");
+            b["a"].overload('zg5.f').implementation = function (p1) {
+                const tag = "sz.d$b.a"
+                info(tag, `enter`)
+                param(tag, `p1:${(p1)}`)
+                // stack(tag)
+                let r = this["a"](p1)
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+    }
+
+    static LineSendMessage() {
+        LegacyTalkServiceClientImpl()
+        e3()
+        i85()
+        oc5()
+        pc5()
+
+        function pc5() {
+            const pc5_c0 = Java.use("pc5.c0")
+            //pc5.c0.V
+            pc5_c0['V'].implementation = function (index, list) {
+                // public static final Object getListValueByIndex(int index, List list) {
+                const tag = "pc5.c0.getListValueByIndex"
+                info(tag, `enter`)
+                param(tag, `index:${index}`)
+                param(tag, `list:${gson(list)}`)
+                // stack(tag)
+                const r = pc5_c0['V'](index, list)
+                if (r != null && r.$className.indexOf("ByteBuffer") !== -1) {
+                    const ins = Java.cast(r, Java.use(r.$className));
+                    retval(tag, `${gson(ins['array']())}`)
+                } else {
+                    retval(tag, `${gson(r)}`)
+                }
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        function oc5() {
+            const klass = Java.use("oc5.qe")
+            klass['a'].implementation = function (byteBuffer) {
+                const tag = "oc5.Message.addToChunks"
+                info(tag, `enter`)
+                param(tag, `byteBuffer:${gson(byteBuffer.array())}`)
+                // stack(tag)
+                this['a'](byteBuffer)
+                info(tag, `leave`)
+            }
+
+        }
+
+        function i85() {
+            let i85_c = Java.use("i85.c")
+            i85_c['g'].implementation = function (priKey, pubKey) {
+                // public static byte[] calculateAgreement(byte[] arr_b, byte[] arr_b1) {
+                const tag = "KeyPair.calculateAgreement"
+                info(tag, `enter`)
+                param(tag, `private key:${gson(priKey)}`)
+                param(tag, `public key:${gson(pubKey)}`)
+                // stack(tag)
+                const r = i85_c['g'](priKey, pubKey)
+                retval(tag, `${gson(r)}`)
+                info(tag, `leave`)
+                return r
+            }
+            i85_c['d'].implementation = function (sharedKey, rnd16) {
+                // public static byte[] sha256(byte[] bArr1, byte[] bArr2) throws NoSuchAlgorithmException {
+                const tag = "KeyPair.sha256"
+                info(tag, `enter`)
+                info(tag, `enter`)
+                param(tag, `sharedKey:${gson(sharedKey)}`)
+                param(tag, `rnd16:${gson(rnd16)}`)
+                // stack(tag)
+                const r = i85_c['d'](sharedKey, rnd16)
+                retval(tag, `${gson(r)}`)
+                info(tag, `leave`)
+                return r
+            }
+
+            let i85_k = Java.use("i85.k")
+            i85_k['l'].implementation = function (keyId, mid) {
+                //  public final E2EEPublicKey getE2EEPublicKeyByKeyIDAndMid(int keyId, String mid) throws Exception {
+                const tag = "i85.k.getE2EEPublicKeyByKeyIDAndMid"
+                info(tag, `enter`)
+                param(tag, `keyId:${keyId}`)
+                param(tag, `mid:${mid}`)
+                stack(tag)
+                const r = this['l'](keyId, mid)
+                retval(tag, `${gson(r)}`)
+                info(tag, `leave`)
+                return r
+            }
+
+            let i85_r = Java.use("i85.r")
+            i85_r['a'].implementation = function (msg, key) {
+                // public static final void decrypt(Message msg, E2EEKeyInfo key)
+                const tag = "i85.r.decrypt"
+                info(tag, `enter`)
+                param(tag, `msg:${gson(msg)}`)
+                param(tag, `key:${gson(key)}`)
+                // stack(tag)
+                i85_r['a'](msg, key)
+                retval(tag, `${gson(msg)}`)
+                info(tag, `leave`)
+            }
+            i85_r['b'].implementation = function (myMid, msg, keyInfo, allowTypes, e2eeSpecVersion, sequenceNumber) {
+                //public static final void handleMsgChunks(String myMid, Message msg, E2EEKeyInfo keyInfo, Set allowTypes, E2eeSpecVersion e2eeSpecVersion, long sequenceNumber) throws Exception {
+                const tag = "i85.r.handleMsgChunks"
+                info(tag, `enter`)
+                param(tag, `myMid:${myMid}`)
+                param(tag, `msg:${gson(msg)}`)
+                param(tag, `keyInfo:${gson(keyInfo)}`)
+                param(tag, `allowTypes:${gson(allowTypes)}`)
+                param(tag, `e2eeSpecVersion:${gson(e2eeSpecVersion)}`)
+                param(tag, `sequenceNumber:${sequenceNumber}`)
+                // stack(tag)
+                i85_r["b"](myMid, msg, keyInfo, allowTypes, e2eeSpecVersion, sequenceNumber)
+                info(tag, `leave`)
+            }
+            i85_r['c'].implementation = function (from, to, type, keyId01, keyId02, e2eeSpecVersion) {
+                //public static byte[] toByteArray(String from, String to, ContentType type, int fromKeyId, int toKeyId, int e2eeSpecVersion) {
+                const tag = "i85.r.toByteArray"
+                info(tag, `enter`)
+                param(tag, `from:${from}`)
+                param(tag, `to:${to}`)
+                param(tag, `type:${gson(type)}`)
+                param(tag, `keyId01:${keyId01}`)
+                param(tag, `keyId02:${keyId02}`)
+                param(tag, `ver:${e2eeSpecVersion}`)
+                // stack(tag)
+                const result = i85_r['c'](from, to, type, keyId01, keyId02, e2eeSpecVersion)
+                retval(tag, `${gson(result)}`)
+                info(tag, `leave`)
+                return result
+            }
+            i85_r['e'].implementation = function (msg) {
+                // public static final boolean checkE2EESpecVersion(Message message) {
+                const tag = "i85.r.checkE2EESpecVersion"
+                info(tag, `enter`)
+                param(tag, `msg:${gson(msg)}`)
+                // stack(tag)
+                const result = i85_r['e'](msg)
+                retval(tag, `${result}`)
+                info(tag, `leave`)
+                return result
+            }
+        }
+
+        // za5.e3.i 创建消息
+        function e3() {
+            const e3 = Java.use("za5.e3")
+            e3["i"].implementation = function () {
+                const tag = `e3.createServerMessage`
+                info(tag, `enter`)
+                info(tag, `needNegotiate:${this['_o'].value}`)
+                info(tag, `this.j:${gson(this['_j'].value)}`)
+                info(tag, `i85.b.enableE2EE:${Java.use("i85.b")["a"]()}`)
+                // stack(tag)
+                const r = this['i']()
+                retval(tag, `${gson(r)}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        // jp.naver.line.android.thrift.client.impl.LegacyTalkServiceClientImpl.G5
+        function LegacyTalkServiceClientImpl() {
+            const klass = Java.use("jp.naver.line.android.thrift.client.impl.LegacyTalkServiceClientImpl")
+            //    public final void sendTextMessage(MessageContentType msgContentType, int reqSeq, Message msg, d3 d30, UserClient client, HashMap hashMap0, Map map0) throws TException {
+            klass['H5'].implementation = function (msgContentType, reqSeq, msg, d30, client, hashMap, map) {
+                // 这里是处理文本消息
+                const tag = `LegacyTalkServiceClientImpl.sendTextMessage`
+                info(tag, `enter`)
+                param(tag, `msgContentType:${msgContentType}`)
+                param(tag, `reqSeq:${reqSeq}`)
+                param(tag, `msg:${gson(msg)}, chunks:${gson(msg['_o'].value)}`)
+                param(tag, `d30:${gson(d30)}`)
+                param(tag, `client:${client}，oprot:${client['_b'].value}, trans_:${client['_b'].value['_a'].value}`)
+                param(tag, `hashMap:${gson(hashMap)}`)
+                param(tag, `map:${gson(map)}`)
+                // stack(tag)
+                this['H5'](msgContentType, reqSeq, msg, d30, client, hashMap, map)
+                info(tag, `leave`)
+            }
+            // public final void sendMessage(int reqSeq, Message msg, d3 d30, UserClient client, Map map) throws TException {
+            klass['G5'].implementation = function (reqSeq, msg, d30, client, map) {
+                // 这里是处理不压缩消息的地方
+                const tag = `LegacyTalkServiceClientImpl.sendMessage`
+                info(tag, `enter`)
+                param(tag, `reqSeq:${reqSeq}`)
+                param(tag, `msg:${gson(msg)}`)
+                param(tag, `d30:${gson(d30)}`)
+                param(tag, `client:${client}`)
+                param(tag, `map:${gson(map)}`)
+                // stack(tag)
+                this['G5'](reqSeq, msg, d30, client, map)
+                info(tag, `leave`)
+            }
+            //public final void handleMessage(int reqSeq, Message msg, HashMap hashMap0, Map map0, d3 d30) {
+            klass['e0'].implementation = function (reqSeq, msg, hashMap, map, d30) {
+                // 消息处理方法，后面从这里根据 msg 的不同再派发到不同的处理方法中
+                const tag = `LegacyTalkServiceClientImpl.handleMessage`
+                info(tag, `enter`)
+                param(tag, `reqSeq:${reqSeq}`)
+                param(tag, `msg:${gson(msg)}`)
+                param(tag, `hashMap:${gson(hashMap)}`)
+                param(tag, `map:${gson(map)}`)
+                param(tag, `d30:${gson(d30)}`)
+                // stack(tag)
+                this['e0'](reqSeq, msg, hashMap, map, d30)
+                info(tag, `leave`)
+            }
+        }
+    }
+
+    //===================================================
+    static JSON() {
+        json()
+
+        function json() {
+            const klass = Java.use("org.json.JSONObject")
+            klass['toString'].overload().implementation = function () {
+                const tag = "JSONObject.toString"
+                info(tag, `enter`)
+                // stack(tag)
+                let r = this['toString']()
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+            klass['optString'].overload('java.lang.String').implementation = function (key) {
+                const tag = `JSONObject.optString`
+
+                if (key !== "text") {
+                    return this['optString'](key)
+                }
+
+                info(tag, `enter`)
+                param(tag, `key:${key}`)
+                // stack(tag)
+                let r = this['optString'](key)
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+    }
+
+    static LegyRequest() {
+        wz()
+
+        function wz() {
+            const klass = Java.use("wz.a")
+            // public final void fetchOps(LegyDestination destination, LegyApiType apiType, URL url, String httpMethod, Map headerFields, LegyRequestData data, v option, n n0) throws Exception {
+            klass['a'].implementation = function (destination, apiType, url, httpMethod, headerFields, data, option, n0) {
+                const tag = "LineRequest.fetchOps"
+                info(tag, `enter`)
+                param(tag, `destination:${destination}`)
+                param(tag, `apiType:${apiType}`)
+                param(tag, `url:${url}`)
+                param(tag, `httpMethod:${httpMethod}`)
+                param(tag, `headerFields:${gson(headerFields)}`)
+                param(tag, `data:${gson(data)}`)
+                param(tag, `option:${gson(option)}`)
+                param(tag, `n0(${n0.$className}):${gson(n0)}`)
+                stack(tag)
+                this['a'](destination, apiType, url, httpMethod, headerFields, data, option, n0)
+                info(tag, `leave`)
+            }
+        }
+    }
+
+    static LineThrift() {
+        // TTransportImpl()
+        RegisterClient()
+
+        // PersonClient()
+
+        function TTransportImpl() {
+            const TTransportRegister = Java.use("ib5.e")
+            TTransportRegister["m"].implementation = function (p1, map) {
+                const tag = "TTransportRegister.headerFields"
+                param(tag, `p1: ${gson(p1)}`)
+                param(tag, `map:${gson(map)}`)
+                // stack(tag)
+                let r = this["m"](p1, map)
+                retval(tag, `${r}`)
+                return r
+            }
+        }
+
+        // 猜测所有与注册相关的函数调用请求都是从这里发出的
+        function RegisterClient() {
+            const RegisterClient = Java.use("x12.i0")
+            RegisterClient["r"].implementation = function (request) {
+                const tag = "RegisterClient.openSession"
+                method = "openSession"
+                param(tag, `"request": ${gson(request)}`)
+                // stack(tag)
+                let r = this["r"](request)
+                g_authSessionID = r
+                retval(tag, `${r}`)
+                return r
+            }
+            RegisterClient["g"].implementation = function (authSessionId, result) {
+                const tag = "RegisterClient.getCountryInfo"
+                method = "getCountryInfo"
+                param(tag, `authSessionId:${authSessionId}`)
+                param(tag, `"result":${gson(result)}`)
+                // stack(tag)
+                let r = this["g"](authSessionId, result)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["o"].implementation = function (request) {
+                const tag = "RegisterClient.lookupAvailableEap"
+                method = "lookupAvailableEap"
+                param(tag, `request: ${gson(request)}`)
+                // stack(tag)
+                let r = this["o"](request)
+                retval(tag, `${r["toString"]()}`)
+                return r
+            }
+            RegisterClient["c"].implementation = function (authSessionId, countryCode) {
+                const tag = "RegisterClient.getAllowedRegistrationMethod"
+                method = "getAllowedRegistrationMethod"
+                param(tag, `authSessionId:${authSessionId}`)
+                param(tag, `countryCode: ${gson(countryCode)}`)
+                // stack(tag)
+                let r = this["c"](authSessionId, countryCode)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["h"].implementation = function (request) {
+                const tag = "RegisterClient.getPhoneVerifMethodForRegistration"
+                method = "getPhoneVerifMethodForRegistration"
+                param(tag, `request: ${gson(request)}`)
+                // stack(tag)
+                let r = this["h"](request)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["u"].implementation = function (request) {
+                const tag = "RegisterClient.requestToSendPhonePinCode"
+                method = "requestToSendPhonePinCode"
+                param(tag, `request: ${gson(request)}`)
+                // stack(tag)
+                let r = this["u"](request)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["z"].implementation = function (request) {
+                const tag = "RegisterClient.verifyPhonePinCode"
+                method = "verifyPhonePinCode"
+                param(tag, `request: ${gson(request)}`)
+                // stack(tag)
+                let r = this["z"](request)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["e"].implementation = function (authSessionID, accountIdentifier) {
+                const tag = "RegisterClient.getAcctVerifMethod"
+                method = "getAcctVerifMethod"
+                param(tag, `authSessionID:${authSessionID}`)
+                param(tag, `accountIdentifier: ${gson(accountIdentifier)}`)
+                // stack(tag)
+                let r = this["e"](authSessionID, accountIdentifier)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["c"].implementation = function (authSessionID, request) {
+                const tag = "RegisterClient.exchangeEncryptionKey"
+                method = "exchangeEncryptionKey"
+                param(tag, `authSessionID:${authSessionID}`)
+                param(tag, `request: ${gson(request)}`)
+                // stack(tag)
+                let r = this["c"](authSessionID, request)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["v"].implementation = function (authSessionID, encryptedPassword) {
+                const tag = "RegisterClient.setPassword"
+                method = "setPassword"
+                param(tag, `authSessionID:${authSessionID}`)
+                param(tag, `encryptedPassword: ${gson(encryptedPassword)}`)
+                // stack(tag)
+                let r = this["v"](authSessionID, encryptedPassword)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["t"].implementation = function (authSessionID) {
+                const tag = "RegisterClient.registerPrimaryUsingPhoneWithTokenV3"
+                method = "registerPrimaryUsingPhoneWithTokenV3"
+                param(tag, `authSessionID: ${authSessionID}}`)
+                // stack(tag)
+                let r = this["t"](authSessionID)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+            RegisterClient["e"].implementation = function (str, accountIdentifier) {
+                const tag = "RegisterClient.getAcctVerifMethod"
+                info(tag, `enter`)
+                param(tag, `str:${str}`)
+                param(tag, `accountIdentifier:${gson(accountIdentifier)}`)
+                let r = this["e"](str, accountIdentifier)
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+        }
+
+        // 猜测所有跟用户相关的函数调用请求都是从这里发出的
+        function PersonClient() {
+            // let PersonClient = Java.use("oc5.ui")
+        }
+    }
+
+    static AndroidPackage() {
+        Context()
+        ContentResolver()
+
+        function Context() {
+            // android.content.Context.getContentResolver
+            const Context = Java.use("android.content.Context")
+            Context["getContentResolver"].implementation = function () {
+                const tag = "Context.getContentResolver"
+                info(tag, `enter`)
+                // stack(tag)
+                let r = this["getContentResolver"]()
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        function ContentResolver() {
+            const ApplicationContentResolver = Java.use("android.app.ContextImpl$ApplicationContentResolver")
+            ApplicationContentResolver["query"].overload('android.net.Uri', '[Ljava.lang.String;', 'java.lang.String', '[Ljava.lang.String;', 'java.lang.String').implementation = function (uri, projection, selection, selectionArgs, sortOrder) {
+                const tag = "ApplicationContentResolver.query"
+                info(tag, `enter`)
+                let b = uri.toString().indexOf("contacts") !== -1
+                if (b) {
+                    param(tag, `uri:${uri}`)
+                    param(tag, `projection:${projection}`)
+                    param(tag, `selection:${selection}`)
+                    param(tag, `selectionArgs:${selectionArgs}`)
+                    param(tag, `sortOrder:${sortOrder}`)
+                    // stack(tag)
+                }
+                let r = this["query"](uri, projection, selection, selectionArgs, sortOrder)
+                if (b) {
+                    retval(tag, `${r}`)
+                }
+                info(tag, `leave`)
+                return r
+            }
+        }
+    }
+
+    static JavaPackage() {
+        HttpsURLConnection()
+        HttpURLConnection()
+        URL()
+
+        function HttpsURLConnection() {
+            const HttpsURLConnection = Java.use("javax.net.ssl.HttpsURLConnection")
+            HttpsURLConnection["setSSLSocketFactory"].implementation = function (sslSocketFactory) {
+                const tag = "HttpsURLConnection.setSSLSocketFactory"
+                info(tag, `enter`)
+                param(tag, `sslSocketFactory: ${gson(sslSocketFactory)}`)
+                // stack(tag)
+                let r = this["setSSLSocketFactory"](sslSocketFactory)
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+
+        function HttpURLConnection() {
+            const HttpURLConnection = Java.use("java.net.HttpURLConnection")
+            HttpURLConnection["setRequestMethod"].implementation = function (method) {
+                const tag = "HttpURLConnection.setRequestMethod"
+                info(tag, `enter`)
+                param(tag, `method:${method}`)
+                // stack(tag)
+                this["setRequestMethod"](method)
+                info(tag, `leave`)
+            }
+        }
+
+        function URL() {
+            const URL = Java.use("java.net.URL")
+            init()
+            openConnection()
+
+            function init() {
+                //overload('java.lang.String')
+                URL["$init"].overload('java.lang.String').implementation = function (url) {
+                    const tag = "URL.$init(String)"
+                    if (url)
+                        info(tag, `enter`)
+                    param(tag, `url:${url}`)
+                    // stack(tag)
+                    this["$init"](url)
+                    info(tag, `leave`)
+                }
+                //overload('java.net.URL', 'java.lang.String')
+                URL["$init"].overload('java.net.URL', 'java.lang.String').implementation = function (url, spec) {
+                    const tag = "URL.$init(URL, String)"
+                    info(tag, `enter`)
+                    param(tag, `url:${gson(url)}`)
+                    param(tag, `spec:${spec}`)
+                    // stack(tag)
+                    this["$init"](url, spec)
+                    info(tag, `leave`)
+                }
+            }
+
+            function openConnection() {
+                const tag = "URL.openConnection"
+                URL["openConnection"].overload().implementation = function () {
+                    info(tag, `enter`)
+                    // stack(tag)
+                    let r = this["openConnection"]()
+                    retval(tag, `${r}`)
+                    info(tag, `leave`)
+                    return r
+                }
+            }
+        }
+    }
+
+    static OkHttp() {
+        OkHttpClient()
+        // Request()
+        // Request_Builder()
+
+        // HttpURL_Builder()
+
+        function OkHttpClient() {
+            const OkHttpClient = Java.use("ug5.x")
+            OkHttpClient["a"].implementation = function (request) {
+                const tag = "Okhttp3Client.newCall"
+                info(tag, `enter`)
+                // error(tag, `certificatePinner:${gson(this['v'].value)}`)
+                // error(tag, `proxy:${gson(this['m'].value)}`)
+                // error(tag, `x509TrustManager:${gson(this['r'].value)}`)
+                // error(tag, `sslSocketFactory:${gson(this['q'].value)}`)
+                // error(tag, `socketFactory:${gson(this['p'].value)}`)
+                // error(tag, `hostnameVerifier:${gson(this['u'].value)}`)
+                param(tag, `request:${parseRequest(request)}`)
+                // stack(tag)
+                let r = this["a"](request)
+                // retval(tag, `${gson(r)}`)
+                info(tag, `leave`)
+                return r
+            }
+
+            function parseRequest(request) {
+                const tag = `OkHttp.parseRequest`
+                const ins = Java.cast(request, Java.use("ug5.z"))
+                let url = ins["_a"].value
+                url = parseHttpURL(url)
+                const method = ins["_b"].value
+                const headers = ins["c"].value
+                let body = ins["d"].value
+                if (body != null && body.$className === "wz.a$b") {
+                    body = parseRequestBody(Java.cast(body, Java.use("wz.a$b"))["a"].value)
+                } else if (body != null) {
+                    warn(tag, `body is not null, but not wz.a$b, body:${body}`)
+                }
+                const tags = ins["e"].value
+                return `Request:(url:${url}, method:${method}, headers:${gson(headers)}, body:${body}, tags:${gson(tags)})`
+
+                function parseHttpURL(url) {
+                    const ins = Java.cast(url, Java.use("ug5.s"))
+                    const scheme = ins["_a"].value
+                    const username = ins["_b"].value
+                    const password = ins["_c"].value
+                    const host = ins["_d"].value
+                    const port = ins["_e"].value
+                    const pathSegments = ins["_f"].value
+                    const queryNamesAndValues = ins["_g"].value
+                    const fragment = ins["_h"].value
+                    const url_ = ins["_i"].value
+                    const isHttps = ins["_j"].value
+                    return `instance:(scheme:${scheme}, username:${username}, password:${password}, host:${host}, port:${port}, pathSegments:${gson(pathSegments)}, queryNamesAndValues:${gson(queryNamesAndValues)}, fragment:${fragment}, url:${url_}, isHttps:${isHttps})`
+                }
+
+                function parseRequestBody(body) {
+                    const ins = Java.cast(body, Java.use("jz.l"))
+                    const len = ins["a"].value
+                    const data = ins["b"].value
+                    const shouldUseSecureConnection = ins["c"].value
+                    return `RequestBody:(len:${len}, data:${gson(data)}, shouldUseSecureConnection:${shouldUseSecureConnection})`
+                }
+            }
+        }
+
+        function Request() {
+            const Request = Java.use("ug5.z")
+            // Request["$init"].implementation = function (url, method, headers, requestBody, tags) {
+            //     const tag = "Okhttp3.Request.$init"
+            //     param(tag, `url: ${url}`)
+            //     param(tag, `method: ${method}`)
+            //     param(tag, `headers: ${headers}`)
+            //     param(tag, `requestBody: ${gson(requestBody)}`)
+            //     param(tag, `tags: ${gson(tags)}`)
+            //     // stack(tag)
+            //     this["$init"](url, method, headers, requestBody, tags)
+            // }
+
+            Request["b"].implementation = function (type) {
+                const tag = "Okhttp3.Request.tag"
+                info(tag, `enter`)
+                param(tag, `type: ${type}`)
+                // stack(tag)
+                let r = this["b"](type)
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        function Request_Builder() {
+            const Builder = Java.use("ug5.z$a")
+            // public final Request build() {
+            Builder["b"].implementation = function () {
+                const tag = "Okhttp3.Request.Builder.build"
+                info(tag, `enter`)
+                // stack(tag)
+                let r = this["b"]()
+                retval(tag, `${gson(r)}`)
+                info(tag, `leave`)
+                return r
+            }
+        }
+
+        function HttpURl() {
+            // const HttpURL = Java.use("ug5.s")
+        }
+
+        function HttpURL_Builder() {
+            const Builder = Java.use("ug5.s$a")
+            // public final HttpUrl build() {
+            Builder["b"].implementation = function () {
+                const tag = "Okhttp3.HttpUrl.Builder.build"
+                param(tag, `${tag} enter`)
+                // stack(tag)
+                let r = this["b"]()
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+        }
+    }
+
+    static Thrift() {
+        // TProtol()
+        // TCompactProtocol()
+        TServiceClient()
+
+        function TProtol() {
+            const TProtocol = Java.use("vh5.e")
+            TProtocol["c"].implementation = function () {
+                const tag = "TProtocol.getScheme"
+                // stack(tag)
+                let r = this["c"]()
+                retval(tag, `${gson(r)}`)
+                return r
+            }
+        }
+
+        function TCompactProtocol() {
+            const klass = Java.use("org.apache.thrift.protocol.a")
+            // klass["$init"].overload('xh5.d').implementation = function (p1) {
+            //     const tag = "TCompactProtocol.init(p1)"
+            //     info(tag, `enter`)
+            //     param(tag, `p1: ${gson(p1)}`)
+            //     // stack(tag)
+            //     this["$init"](p1)
+            //     info(tag, `leave`)
+            // }
+            // klass["$init"].overload('xh5.d', 'long', 'long').implementation = function (p1, p2, p3) {
+            //     const tag = "TCompactProtocol.init(p1,p2,p3)"
+            //     info(tag, `enter`)
+            //     param(tag, `p1: ${gson(p1)}`)
+            //     param(tag, `p2:${p2}`)
+            //     param(tag, `p3:${p3}`)
+            //     // stack(tag)
+            //     this["$init"](p1, p2, p3)
+            //     info(tag, `leave`)
+            // }
+            klass["U"].implementation = function (type) {
+                const tag = "TCompactProtocol.getTType"
+                info(tag, `enter`)
+                param(tag, `type:${type}`)
+                // stack(tag)
+                let r = this["U"](type)
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+            klass["f"].implementation = function () {
+                const tag = "TCompactProtocol.readByte"
+                info(tag, `enter`)
+                // stack(tag)
+                let r = this["f"]()
+                retval(tag, `${r}`)
+                info(tag, `leave`)
+                return r
+            }
+            klass["A"].implementation = function (val) {
+                const tag = `TCompactProtocol.writeByte`
+                info(tag, `enter`)
+                param(tag, `byte:${val}`)
+                // stack(tag)
+                this["A"](val)
+                info(tag, `leave`)
+            }
+            klass["G"].implementation = function (val) {
+                const tag = `TCompactProtocol.writeI32`
+                info(tag, `enter`)
+                param(tag, `int:${val}`)
+                // stack(tag)
+                this["G"](val)
+                info(tag, `leave`)
+            }
+            klass["y"].implementation = function (val) {
+                const tag = `TCompactProtocol.writeBinary`
+                info(tag, `enter`)
+                param(tag, `binary:${val}`)
+                // stack(tag)
+                this["y"](val)
+                info(tag, `leave`)
+            }
+
+            // const factory = Java.use("org.apache.thrift.protocol.a$a")
+            // factory["H1"].implementation = function (p1) {
+            //     const tag = "TCompactProtocolFactory.getProtocol"
+            //     info(tag, `enter`)
+            //     param(tag, `p1: ${gson(p1)}`)
+            //     // stack(tag)
+            //     this["H1"](p1)
+            //     info(tag, `leave`)
+            // }
+        }
+
+        function TServiceClient() {
+            const TServiceClient = Java.use("org.apache.thrift.n")
+            TServiceClient["a"].implementation = function (methodName, result) {
+                const tag = `TServiceClient.receiveBase`
+                param(tag, `methodname: ${methodName}`)
+                param(tag, `result: ${gson(result)}`)
+                info(tag, `seqid: ${this["c"].value}`)
+                stack(tag)
+                this["a"](methodName, result)
+                retval(tag, `methodname: ${methodName}, result: ${gson(result)}, seqid: ${this["c"].value}`)
+            }
+            TServiceClient["b"].implementation = function (methodName, args) {
+                const tag = `TServiceClient.sendBase`
+                // const oprot_ = this["_b"].value
+                // const trans_ = oprot_["_a"].value
+                // const seqid = this["c"].value
+                // Thrift.log_tprotocol(this)
+                // error(tag, `oprot_: ${(oprot_)}`)
+                // error(tag, `trans_: ${(trans_)}`)
+                param(tag, `methodname:${methodName}`)
+                param(tag, `args: ${gson(args)}`)
+                stack(tag)
+                this["b"](methodName, args)
+            }
+        }
+
+        function log_tprotocol(client) {
+            const tag = `log_tprotocol`
+            const iprot_ = client["_a"].value
+            const trans_ = iprot_["_a"].value
+            const data = Java.cast(trans_, Java.use("ib5.e"))["c"].value
+            // info(tag, `tprotocol: ${ gson(iprot_) }`)
+            info(tag, `transprot: ${gson(trans_)}`)
+            info(tag, `transprot_data: ${gson(data)}`)
+        }
+    }
+}
+
+setImmediate(() => {
+    AntiAntiFrida()
+    if (Java.available) {
+        Java.perform(() => {
+            FridaScript.LineThrift()
+            FridaScript.JavaPackage()
+            FridaScript.OkHttp()
+            FridaScript.Thrift()
+            // FridaScript.AndroidPackage()
+            FridaScript.LegyRequest()
+            FridaScript.JSON()
+
+            // FridaScript.LineRegister()
+            // FridaScript.LineUserProfileImage()
+            // FridaScript.LineAccessToken()
+            // FridaScript.LineContact()
+            FridaScript.LineSendMessage()
+        })
+    }
+})
